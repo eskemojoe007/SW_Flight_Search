@@ -16,15 +16,17 @@ from matplotlib.dates import HOURLY, DateFormatter, rrulewrapper, RRuleLocator,A
 import time
 import requests
 import os
+import codecs
 sns.set()
 # end%%
 
 # %%
-def get_airport_codes(url_obj=None,url='https://www.southwest.com/flight/search-flight.html'):
-    if url_obj is None:
-        url_obj = urllib3.urlopen(url)
+def get_airport_codes(request_obj=None,url='https://www.southwest.com/flight/search-flight.html'):
+    if request_obj is None:
+        request_obj = requests.get(url)
+        # request_obj = urllib3.urlopen(url)
 
-    soup = BeautifulSoup(url_obj,'html.parser')
+    soup = BeautifulSoup(request_obj.content,'html.parser')
 
     options = soup.find(attrs={'class':'stationInput','id':'originAirport'}).findAll('option')
 
@@ -39,10 +41,28 @@ def get_airports_dat(fn='airports.dat'):
 
     if not os.path.isfile(fn):
         response = requests.get('https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat')
-
-        with open(fn,'w') as f:
+        with codecs.open(fn,'w',encoding=response.encoding) as f:
             f.write(response.text)
-get_airports_dat()
+
+def get_airport_df(fn='airports.dat'):
+    get_airports_dat(fn=fn)
+    df = pd.read_csv(fn,index_col=0,
+        names=['Airport ID',
+        'Name',
+        'City',
+        'Country',
+        'IATA',
+        'ICAO',
+        'Latitude',
+        'Longitude',
+        'Altitude',
+        'Timezone',
+        'DST',
+        'Tz database time zone',
+        'Type',
+        'Source'], na_values=['\\N'])
+    return df
+
 
 def check_codes(codes,available_codes=None):
     if available_codes is None:
@@ -202,7 +222,7 @@ def get_results_soup(driver):
     return BeautifulSoup(driver.page_source,'html.parser')
 
 def get_results_soup_request(r):
-    return BeautifulSoup(str(r),'html.parser')
+    return BeautifulSoup(r.content,'html.parser')
 
 def get_outbound_df(soup,date_str,origin,destination):
     outbounds = soup.find(attrs={'id':'faresOutbound'}).findAll('tr',{'id': re.compile('outbound_flightRow_.*')})
@@ -239,6 +259,8 @@ def get_outbound_df(soup,date_str,origin,destination):
 gmaps = googlemaps.Client(key='AIzaSyD5342S4ws31btGQCSptFBt_knn8u683do')
 
 def get_times(origin, destination, arrival_time,traffic_model='best_guess'):
+    origin = get_lat_long_string(origin)
+    destination = get_lat_long_string(destination)
 
 
     directions_result = gmaps.directions(origin,
@@ -257,14 +279,50 @@ def get_times(origin, destination, arrival_time,traffic_model='best_guess'):
                                         )
     return pd.to_timedelta(directions_result[0]['legs'][0]['duration_in_traffic']['text'].replace('mins','min'))
 
-def get_lat_long(location):
-    geocode = gmaps.geocode(location)
-    return '%.10f, %.10f'%(geocode[0]['geometry']['location']['lat'],geocode[0]['geometry']['location']['lng'])
+def get_airport_lookup_index(airport_code,airport_df=None,key_type='IATA'):
+    if airport_df is None:
+        airport_df = get_airport_df()
+
+    mask = airport_df[key_type].str.upper().str.strip() == airport_code.upper().strip()
+
+    if mask.sum() < 1:
+        raise ValueError('Could not find %s in airport df'%(airport_code))
+    elif mask.sum() > 1:
+        raise ValueError('Multiple Found of %s in airport df'%(airport_code))
+    else:
+        return airport_df.index[mask][0]
+
+def get_lat_long(airport_code,airport_df=None,key_type='IATA'):
+    if airport_df is None:
+        airport_df = get_airport_df()
+
+    index = get_airport_lookup_index(airport_code,airport_df=airport_df,key_type=key_type)
+    return airport_df.at[index,'Latitude'],airport_df.at[index,'Longitude']
+
+def get_timezone_code(airport_code,airport_df=None,key_type='IATA'):
+    if airport_df is None:
+        airport_df = get_airport_df()
+
+    index = get_airport_lookup_index(airport_code,airport_df=airport_df,key_type=key_type)
+
+    return airport_df.at[index,'Tz database time zone']
+
+def get_lat_long_string(lat_long_tup):
+    if isinstance(lat_long_tup,str):
+        return lat_long_tup
+    else:
+        return "{}".format(','.join(str(ll) for ll in lat_long_tup))
 
 
-def get_timezone_code(location):
-    lat_long = get_lat_long(location)
-    return gmaps.timezone(location=lat_long,timestamp=datetime.now())['timeZoneId']
+
+# def get_lat_long(location):
+#     geocode = gmaps.geocode(location)
+#     return '%.10f, %.10f'%(geocode[0]['geometry']['location']['lat'],geocode[0]['geometry']['location']['lng'])
+#
+#
+# def get_timezone_code(location):
+#     lat_long = get_lat_long(location)
+#     return gmaps.timezone(location=lat_long,timestamp=datetime.now())['timeZoneId']
 # end%%
 
 # %% Get and sort agony
@@ -292,9 +350,10 @@ def get_sort_agony(df):
 # %% Do it allows
 def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
     available_dict = get_airport_codes()
-    d = get_driver()
-    enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-    soup = get_results_soup_request(d)
+    # d = get_driver()
+    # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
+    r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
+    soup = get_results_soup_request(r)
     df = get_outbound_df(soup,outbound_date_str,origin,destination)
     add_timezones(df,'origin','depart_time')
     add_timezones(df,'destination','arrive_time')
@@ -331,9 +390,25 @@ def get_iter_items(origins,destinations,outbound_date_strs,return_date_strs):
     s = [origins,destinations,outbound_date_strs,return_date_strs]
     return list(itertools.product(*s))
 # end%%
+
+# %% Testing single flight line by line
+available_dict = get_airport_codes()
+# d = get_driver()
+# enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
+r = enter_single_search('CLT','SLC','05/03/2018','05/07/2018',available_codes=available_dict)
+r.text
+soup = get_results_soup_request(r)
+soup
+df = get_outbound_df(soup,'05/03/2018','CLT','SLC')
+df
+add_timezones(df,'origin','depart_time')
+add_timezones(df,'destination','arrive_time')
+add_drivetimes(df,'origin','depart_time','depart_drive_time')
+df
+# end%%
 # %%
 # enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
-# df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
+df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
 # df
 dfs = do_all_multiple_flight(['ATL','CLT'],['SLC'],['05/03/2018','05/04/2018'],['05/07/2018'])
 # iters = get_iter_items(['ATL','CLT'],['SLC'],['05/03/2018'],['05/07/2018'])
