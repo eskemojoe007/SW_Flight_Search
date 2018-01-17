@@ -1,8 +1,7 @@
 # %% Import Libraries
-import urllib2
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.common.keys import Keys
+# from selenium import webdriver
+# from selenium.webdriver.common.keys import Keys
 import re
 import pandas as pd
 import numpy as np
@@ -15,13 +14,15 @@ from matplotlib import dates
 import seaborn as sns
 from matplotlib.dates import HOURLY, DateFormatter, rrulewrapper, RRuleLocator,AutoDateFormatter, HourLocator
 import time
+import requests
+import os
 sns.set()
 # end%%
 
 # %%
 def get_airport_codes(url_obj=None,url='https://www.southwest.com/flight/search-flight.html'):
     if url_obj is None:
-        url_obj = urllib2.urlopen(url)
+        url_obj = urllib3.urlopen(url)
 
     soup = BeautifulSoup(url_obj,'html.parser')
 
@@ -32,6 +33,16 @@ def get_airport_codes(url_obj=None,url='https://www.southwest.com/flight/search-
         airport_codes[option['value']] = option.text
 
     return airport_codes
+
+
+def get_airports_dat(fn='airports.dat'):
+
+    if not os.path.isfile(fn):
+        response = requests.get('https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat')
+
+        with open(fn,'w') as f:
+            f.write(response.text)
+get_airports_dat()
 
 def check_codes(codes,available_codes=None):
     if available_codes is None:
@@ -104,65 +115,94 @@ def get_driver(method='Firefox'):
             return webdriver.Firefox()
     else:
         raise ValueError('Invalid entry for get_driver method')
-
 def enter_single_search(origin,destination,outbound_date_str,return_date_str,
     method='dollars',driver=None,
-    url='https://www.southwest.com/flight/search-flight.html',
+    url='https://www.southwest.com/flight/search-flight.html?',
     available_codes=None, wait_time=.2):
 
-    if available_codes is None:
-        available_codes = get_airport_codes(url=url)
-    # Check the codes to make sure they are valid
-    check_codes([origin,destination],available_codes=available_codes.keys())
+    if not driver is None:
+        print('Warning...you specified a driver...we no longer use selenium')
 
-    #check date format - Not doing for now...should use datetime to make it right
+    payload = {
+        'twoWayTrip': True,
+        'airTranRedirect': "",
+        'returnAirport': "RoundTrip",
+        'outboundTimeOfDay': "ANYTIME",
+        'returnTimeOfDay': "ANYTIME",
+        'seniorPassengerCount': 0,
+        'fareType': "DOLLARS",
+        'originAirport': origin,
+        'destinationAirport': destination,
+        'outboundDateString': outbound_date_str,
+        'returnDateString': return_date_str,
+        'adultPassengerCount': 1}
 
-    #check driver
-    if driver is None:
-        driver = get_driver()
+    r =requests.post(url,params=payload)
 
-
-    #Perform the action
-    driver.get(url)
-    departure = driver.find_element_by_id('originAirport_displayed')
-    departure.clear()
-    arrival = driver.find_element_by_id('destinationAirport_displayed')
-    arrival.clear()
-    outbound_date = driver.find_element_by_id('outboundDate')
-    outbound_date.clear()
-    return_date = driver.find_element_by_id('returnDate')
-    return_date.clear()
-
-    time.sleep(wait_time)
+    return r
 
 
-    departure.send_keys(available_codes[origin.upper()])
-    # departure.send_keys(origin.upper())
-    # departure.send_keys(Keys.RETURN)
-    time.sleep(wait_time)
-    arrival.send_keys(available_codes[destination.upper()])
-    # arrival.send_keys(destination.upper())
-    # arrival.send_keys(Keys.RETURN)
-    time.sleep(wait_time)
-    outbound_date.clear()
-    outbound_date.send_keys(outbound_date_str)
-    time.sleep(wait_time)
-
-    # outbound_date.send_keys(Keys.RETURN)
-    return_date.clear()
-    return_date.send_keys(return_date_str)
-    time.sleep(wait_time)
-    # return_date.send_keys(Keys.RETURN)
-    time.sleep(wait_time)
-    if method.lower() == 'dollars':
-        radio = driver.find_element_by_id('dollars')
-        radio.click()
-    else:
-        raise ValueError('Invalid search method: %s'%method)
-    driver.find_element_by_id('submitButton').click()
+# def enter_single_search(origin,destination,outbound_date_str,return_date_str,
+#     method='dollars',driver=None,
+#     url='https://www.southwest.com/flight/search-flight.html',
+#     available_codes=None, wait_time=.2):
+#
+#     if available_codes is None:
+#         available_codes = get_airport_codes(url=url)
+#     # Check the codes to make sure they are valid
+#     check_codes([origin,destination],available_codes=available_codes.keys())
+#
+#     #check date format - Not doing for now...should use datetime to make it right
+#
+#     #check driver
+#     if driver is None:
+#         driver = get_driver()
+#
+#
+#     #Perform the action
+#     driver.get(url)
+#     departure = driver.find_element_by_id('originAirport_displayed')
+#     departure.clear()
+#     arrival = driver.find_element_by_id('destinationAirport_displayed')
+#     arrival.clear()
+#     outbound_date = driver.find_element_by_id('outboundDate')
+#     outbound_date.clear()
+#     return_date = driver.find_element_by_id('returnDate')
+#     return_date.clear()
+#
+#     time.sleep(wait_time)
+#
+#
+#     departure.send_keys(available_codes[origin.upper()])
+#     # departure.send_keys(origin.upper())
+#     # departure.send_keys(Keys.RETURN)
+#     time.sleep(wait_time)
+#     arrival.send_keys(available_codes[destination.upper()])
+#     # arrival.send_keys(destination.upper())
+#     # arrival.send_keys(Keys.RETURN)
+#     time.sleep(wait_time)
+#     outbound_date.clear()
+#     outbound_date.send_keys(outbound_date_str)
+#     time.sleep(wait_time)
+#
+#     # outbound_date.send_keys(Keys.RETURN)
+#     return_date.clear()
+#     return_date.send_keys(return_date_str)
+#     time.sleep(wait_time)
+#     # return_date.send_keys(Keys.RETURN)
+#     time.sleep(wait_time)
+#     if method.lower() == 'dollars':
+#         radio = driver.find_element_by_id('dollars')
+#         radio.click()
+#     else:
+#         raise ValueError('Invalid search method: %s'%method)
+#     driver.find_element_by_id('submitButton').click()
 
 def get_results_soup(driver):
     return BeautifulSoup(driver.page_source,'html.parser')
+
+def get_results_soup_request(r):
+    return BeautifulSoup(str(r),'html.parser')
 
 def get_outbound_df(soup,date_str,origin,destination):
     outbounds = soup.find(attrs={'id':'faresOutbound'}).findAll('tr',{'id': re.compile('outbound_flightRow_.*')})
@@ -254,7 +294,7 @@ def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
     available_dict = get_airport_codes()
     d = get_driver()
     enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-    soup = get_results_soup(d)
+    soup = get_results_soup_request(d)
     df = get_outbound_df(soup,outbound_date_str,origin,destination)
     add_timezones(df,'origin','depart_time')
     add_timezones(df,'destination','arrive_time')
@@ -275,7 +315,7 @@ def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_s
         outbound_date_str = i[2]
         return_date_str = i[3]
         enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-        soup = get_results_soup(d)
+        soup = get_results_soup_request(d)
         df_temp = get_outbound_df(soup,outbound_date_str,origin,destination)
         add_timezones(df_temp,'origin','depart_time')
         add_timezones(df_temp,'destination','arrive_time')
