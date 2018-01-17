@@ -224,25 +224,36 @@ def get_results_soup(driver):
 def get_results_soup_request(r):
     return BeautifulSoup(r.content,'html.parser')
 
-def get_outbound_df(soup,date_str,origin,destination):
-    outbounds = soup.find(attrs={'id':'faresOutbound'}).findAll('tr',{'id': re.compile('outbound_flightRow_.*')})
+def get_1way_df(soup,date_str,origin,destination,direction):
+    if direction.lower().strip() == 'outbound':
+        table_id = 'faresOutbound'
+        re_str = 'outbound_flightRow_.*'
+        direction = 'outbound'
+    elif (direction.lower().strip() == 'return') or (direction.lower().strip() == 'inbound'):
+        table_id = 'faresReturn'
+        re_str = 'inbound_flightRow_.*'
+        direction = 'return'
+    else:
+        raise ValueError('bad input for direction')
+
+    flights = soup.find(attrs={'id':table_id}).findAll('tr',{'id': re.compile(re_str)})
     df = []
 
-    for outbound in outbounds:
+    for flight in flights:
         depart_time = pd.to_datetime(
             date_str + ' ' +
-            outbound.find('td',{'class':'depart_column'}).find('span',{'class':'time'}).text
-            + outbound.find('td',{'class':'depart_column'}).find('span',{'class':'indicator'}).text)
+            flight.find('td',{'class':'depart_column'}).find('span',{'class':'time'}).text
+            + flight.find('td',{'class':'depart_column'}).find('span',{'class':'indicator'}).text)
         arrive_time = pd.to_datetime(
             date_str + ' ' +
-            outbound.find('td',{'class':'arrive_column'}).find('span',{'class':'time'}).text
-            + outbound.find('td',{'class':'arrive_column'}).find('span',{'class':'indicator'}).text)
+            flight.find('td',{'class':'arrive_column'}).find('span',{'class':'time'}).text
+            + flight.find('td',{'class':'arrive_column'}).find('span',{'class':'indicator'}).text)
 
-        travel_time = pd.to_timedelta(outbound.find('span',{'class':'duration'}).text)
+        travel_time = pd.to_timedelta(flight.find('span',{'class':'duration'}).text)
 
-        outbound.find('td',{'class':'routing_column'}).find('span',{'style':'display:none'}).text
+        flight.find('td',{'class':'routing_column'}).find('span',{'style':'display:none'}).text
 
-        prices = [float(re.sub('\$','',p.text.strip())) for p in outbound.findAll('label',{'class':'product_price'})]
+        prices = [float(re.sub('\$','',p.text.strip())) for p in flight.findAll('label',{'class':'product_price'})]
         try:
             price = np.min(prices)
         except ValueError:
@@ -250,7 +261,7 @@ def get_outbound_df(soup,date_str,origin,destination):
 
         df.append({'depart_time':depart_time,'arrive_time':arrive_time,
         'travel_time':travel_time,'price':price,'origin':origin,
-        'destination':destination,'direction':'outbound'})
+        'destination':destination,'direction':direction})
 
     return pd.DataFrame(df)
 # end%%
@@ -354,7 +365,9 @@ def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
     # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
     r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
     soup = get_results_soup_request(r)
-    df = get_outbound_df(soup,outbound_date_str,origin,destination)
+    df_outbound = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
+    df_return = get_1way_df(soup,return_date_str,destination,origin,'return')
+    df = pd.c
     add_timezones(df,'origin','depart_time')
     add_timezones(df,'destination','arrive_time')
     add_drivetimes(df,'origin','depart_time','depart_drive_time')
@@ -366,7 +379,6 @@ def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_s
     iters = get_iter_items(origins,destinations,outbound_date_strs,return_date_strs)
 
     available_dict = get_airport_codes()
-    d = get_driver()
     dfs = []
     for i in iters:
         origin = i[0]
@@ -375,7 +387,7 @@ def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_s
         return_date_str = i[3]
         enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
         soup = get_results_soup_request(d)
-        df_temp = get_outbound_df(soup,outbound_date_str,origin,destination)
+        df_temp = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
         add_timezones(df_temp,'origin','depart_time')
         add_timezones(df_temp,'destination','arrive_time')
         add_drivetimes(df_temp,'origin','depart_time','depart_drive_time')
@@ -399,12 +411,14 @@ r = enter_single_search('CLT','SLC','05/03/2018','05/07/2018',available_codes=av
 r.text
 soup = get_results_soup_request(r)
 soup
-df = get_outbound_df(soup,'05/03/2018','CLT','SLC')
+df_outbound = get_1way_df(soup,'05/03/2018','CLT','SLC','outbound')
+df_return  = get_1way_df(soup,'05/03/2018','SLC','CLT','return')
+df = pd.concat([df_outbound,df_return],axis=0).reset_index()
 df
 add_timezones(df,'origin','depart_time')
 add_timezones(df,'destination','arrive_time')
 add_drivetimes(df,'origin','depart_time','depart_drive_time')
-df
+get_sort_agony(df)
 # end%%
 # %%
 # enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
