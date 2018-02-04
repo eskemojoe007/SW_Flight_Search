@@ -1,7 +1,5 @@
 # %% Import Libraries
 from bs4 import BeautifulSoup
-# from selenium import webdriver
-# from selenium.webdriver.common.keys import Keys
 import re
 import pandas as pd
 import numpy as np
@@ -18,6 +16,7 @@ import requests
 import os
 import codecs
 sns.set()
+import pytz
 # end%%
 
 # %%
@@ -385,8 +384,8 @@ def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_s
         destination = i[1]
         outbound_date_str = i[2]
         return_date_str = i[3]
-        enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-        soup = get_results_soup_request(d)
+        r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
+        soup = get_results_soup_request(r)
         df_temp = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
         add_timezones(df_temp,'origin','depart_time')
         add_timezones(df_temp,'destination','arrive_time')
@@ -403,6 +402,20 @@ def get_iter_items(origins,destinations,outbound_date_strs,return_date_strs):
     return list(itertools.product(*s))
 # end%%
 
+# %% Add timezones
+# def add_timezones(df,location_key,time_key):
+#     for city in df[location_key].unique():
+#         tz_code = get_timezone_code(city)
+#         df.loc[df[location_key] == city, time_key] = pd.Index(df[time_key].loc[df[location_key] == city].values).tz_localize(tz_code)
+#
+#     df[time_key] = pd.to_datetime(df[time_key])
+def app_timezone(row,location_key,time_key):
+     tz_str = get_timezone_code(row[location_key])
+
+     return pytz.timezone(tz_str).localize(row[time_key])
+
+# end%%
+
 # %% Testing single flight line by line
 available_dict = get_airport_codes()
 # d = get_driver()
@@ -413,10 +426,13 @@ soup = get_results_soup_request(r)
 soup
 df_outbound = get_1way_df(soup,'05/03/2018','CLT','SLC','outbound')
 df_return  = get_1way_df(soup,'05/03/2018','SLC','CLT','return')
-df = pd.concat([df_outbound,df_return],axis=0).reset_index()
 df
-add_timezones(df,'origin','depart_time')
-add_timezones(df,'destination','arrive_time')
+df = pd.concat([df_outbound,df_return],axis=0).reset_index()
+df['depart_time'] = df.apply(lambda x: app_timezone(x,'origin','depart_time'),axis=1)
+df['arrive_time'] = df.apply(lambda x: app_timezone(x,'origin','arrive_time'),axis=1)
+# add_timezones(df,'origin','depart_time')
+# add_timezones(df,'destination','arrive_time')
+
 add_drivetimes(df,'origin','depart_time','depart_drive_time')
 get_sort_agony(df)
 # end%%
