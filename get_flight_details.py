@@ -26,11 +26,27 @@ def main():
 
 # end%%
 
+# %% Set Proxies
+ proxies = {
+  'http': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80',
+  'https': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80'}
+
+# end%%
+
 # %%
-def get_airport_codes(request_obj=None,url='https://www.southwest.com/flight/search-flight.html'):
+def get_verify(proxies):
+    if proxies is None:
+        return None
+    else:
+        return False
+
+def get_airport_codes(request_obj=None,url='https://www.southwest.com/flight/search-flight.html',proxies=None):
     logging.debug('Getting available airport codes from SW website')
+
+
+    verify = get_verify(proxies)
     if request_obj is None:
-        request_obj = requests.get(url)
+        request_obj = requests.get(url,proxies=proxies,verify=verify)
         # request_obj = urllib3.urlopen(url)
 
     soup = BeautifulSoup(request_obj.content,'html.parser')
@@ -44,11 +60,13 @@ def get_airport_codes(request_obj=None,url='https://www.southwest.com/flight/sea
     return airport_codes
 
 
-def get_airports_dat(fn='airports.dat'):
-
+def get_airports_dat(fn='airports.dat',proxies=None):
+    verify = get_verify(proxies)
     if not os.path.isfile(fn):
         logging.info('Could not find the %s file...downloading from github and saving'%(fn))
-        response = requests.get('https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat')
+        response = requests.get(
+            'https://raw.githubusercontent.com/jpatokal/openflights/master/data/airports.dat',
+            proxies=proxies,verify=verify)
         with codecs.open(fn,'w',encoding=response.encoding) as f:
             f.write(response.text)
     else:
@@ -153,7 +171,8 @@ def strfdelta(tdelta, fmt='{D:02}d {H:02}h {M:02}m {S:02}s', inputtype='timedelt
 def enter_single_search(origin,destination,outbound_date_str,return_date_str,
     method='dollars',driver=None,
     url='https://www.southwest.com/flight/search-flight.html?',
-    available_codes=None, wait_time=.2):
+    available_codes=None, wait_time=.2,
+    proxies=None):
 
     if not driver is None:
         logging.warning('you specified a driver...we no longer use selenium, Driver should always be None...continueing')
@@ -172,7 +191,8 @@ def enter_single_search(origin,destination,outbound_date_str,return_date_str,
         'returnDateString': return_date_str,
         'adultPassengerCount': 1}
 
-    r =requests.post(url,params=payload)
+    verify = get_verify(proxies)
+    r =requests.post(url,params=payload,proxies=proxies,verify=verify)
 
     logging.info('Got payload back from SW')
     return r
@@ -189,7 +209,7 @@ def get_1way_df(soup,date_str,origin,destination,direction):
     # Soup - Soup object (probably created from get_results_soup_request)
     # date_str - date of the search...its hard to get the results date...so you have to pass the searched dates
     # origin - Searched origin str
-    # destination - 
+    # destination -
 
     if direction.lower().strip() == 'outbound':
         table_id = 'faresOutbound'
@@ -327,41 +347,42 @@ def get_sort_agony(df):
 # end%%
 
 # %% Do it allows
-# def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
-#     available_dict = get_airport_codes()
-#     # d = get_driver()
-#     # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-#     r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
-#     soup = get_results_soup_request(r)
-#     df_outbound = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
-#     df_return = get_1way_df(soup,return_date_str,destination,origin,'return')
-#     df = pd.c
-#     add_timezones(df,'origin','depart_time')
-#     add_timezones(df,'destination','arrive_time')
-#     add_drivetimes(df,'origin','depart_time','depart_drive_time')
-#     return get_sort_agony(df)
+def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
+    available_dict = get_airport_codes(proxies=proxies)
+    # d = get_driver()
+    # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
+    r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict,proxies=proxies)
+    soup = get_results_soup_request(r)
+    df_outbound = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
+    # df_return = get_1way_df(soup,return_date_str,destination,origin,'return')
+    df = df_outbound
+    df['depart_time'] = df.apply(lambda x: app_timezone(x,'origin','depart_time'),axis=1)
+    df['arrive_time'] = df.apply(lambda x: app_timezone(x,'destination','arrive_time'),axis=1)
+    add_drivetimes(df,'origin','depart_time','depart_drive_time')
+    return get_sort_agony(df)
 # end%%
 
 # %% Do it all multiple
-# def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_strs):
-#     iters = get_iter_items(origins,destinations,outbound_date_strs,return_date_strs)
-#
-#     available_dict = get_airport_codes()
-#     dfs = []
-#     for i in iters:
-#         origin = i[0]
-#         destination = i[1]
-#         outbound_date_str = i[2]
-#         return_date_str = i[3]
-#         r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
-#         soup = get_results_soup_request(r)
-#         df_temp = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
-#         add_timezones(df_temp,'origin','depart_time')
-#         add_timezones(df_temp,'destination','arrive_time')
-#         add_drivetimes(df_temp,'origin','depart_time','depart_drive_time')
-#
-#         dfs.append(df_temp)
-#     return dfs
+def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_strs):
+    iters = get_iter_items(origins,destinations,outbound_date_strs,return_date_strs)
+
+    available_dict = get_airport_codes(proxies=proxies)
+    dfs = []
+    for i in iters:
+        origin = i[0]
+        destination = i[1]
+        outbound_date_str = i[2]
+        return_date_str = i[3]
+        # r = enter_single_search(origin,destination,outbound_date_str,return_date_str,available_codes=available_dict)
+        # soup = get_results_soup_request(r)
+        # df_temp = get_1way_df(soup,outbound_date_str,origin,destination,'outbound')
+        # add_timezones(df_temp,'origin','depart_time')
+        # add_timezones(df_temp,'destination','arrive_time')
+        # add_drivetimes(df_temp,'origin','depart_time','depart_drive_time')
+        df_temp = do_all_single_flight(origin,destination,outbound_date_str,return_date_str)
+
+        dfs.append(df_temp)
+    return dfs
 
 # end%%
 
@@ -380,68 +401,79 @@ def app_timezone(row,location_key,time_key):
 
 
 # %% Testing single flight line by line
-available_dict = get_airport_codes()
+df
 
-# d = get_driver()
-# enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
-r = enter_single_search('CLT','SLC','05/03/2018','05/07/2018',available_codes=available_dict)
+df = do_all_single_flight('ATL','SEA','07/20/2018','07/29/2018')
+dfs = do_all_multiple_flight(['ATL','CLT'],['SEA'],['07/20/2018','07/21/2018'],['07/29/2018'])
 
-soup = get_results_soup_request(r)
-soup
-df_outbound = get_1way_df(soup,'05/03/2018','CLT','SLC','outbound')
-df_return  = get_1way_df(soup,'05/03/2018','SLC','CLT','return')
-# df = pd.concat([df_outbound,df_return],axis=0).reset_index()
-df = df_outbound
-df['depart_time'] = df.apply(lambda x: app_timezone(x,'origin','depart_time'),axis=1)
-df['arrive_time'] = df.apply(lambda x: app_timezone(x,'origin','arrive_time'),axis=1)
-# add_timezones(df,'origin','depart_time')
-# add_timezones(df,'destination','arrive_time')
+df = pd.concat(dfs)
 
-add_drivetimes(df,'origin','depart_time','depart_drive_time')
-print(get_sort_agony(df))
-# end%%
-# # %%
-# # enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
-# df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
-# # df
-# dfs = do_all_multiple_flight(['ATL','CLT'],['SLC'],['05/03/2018','05/04/2018'],['05/07/2018'])
-# # iters = get_iter_items(['ATL','CLT'],['SLC'],['05/03/2018'],['05/07/2018'])
-# df = pd.concat(dfs,axis=0).reset_index()
-# # iters[0][0]
+df = df.sort_values('agony').reset_index()
+df
+# available_dict = get_airport_codes(proxies=proxies)
+#
+# available_dict
+# # d = get_driver()
+# # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
+# r = enter_single_search('ATL','SEA','07/20/2018','07/29/2018',available_codes=available_dict,
+#     proxies=proxies)
+# soup = get_results_soup_request(r)
+# df_outbound = get_1way_df(soup,'07/20/2018','ATL','SEA','outbound')
+# # df_return  = get_1way_df(soup,'05/03/2018','SLC','CLT','return')
+# # df = pd.concat([df_outbound,df_return],axis=0).reset_index()
+# df = df_outbound
+# df['depart_time'] = df.apply(lambda x: app_timezone(x,'origin','depart_time'),axis=1)
+# df['arrive_time'] = df.apply(lambda x: app_timezone(x,'destination','arrive_time'),axis=1)
+# # add_timezones(df,'origin','depart_time')
+# # add_timezones(df,'destination','arrive_time')
+# df
+# add_drivetimes(df,'origin','depart_time','depart_drive_time')
 # df = get_sort_agony(df)
+# end%%
+# %%
+# enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
+df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
 # df
-# # end%%
+dfs = do_all_multiple_flight(['ATL','CLT'],['SLC'],['05/03/2018','05/04/2018'],['05/07/2018'])
+# iters = get_iter_items(['ATL','CLT'],['SLC'],['05/03/2018'],['05/07/2018'])
+df = pd.concat(dfs,axis=0).reset_index()
+# iters[0][0]
+df = get_sort_agony(df)
+df
+# end%%
 #
-# # %% Plot some shit
-# fig, ax = plt.subplots(figsize=(20,12))
-#
-# starts = dates.date2num(df['depart_time'].tolist()) - 4./24
-# stops = dates.date2num(df['arrive_time_act'].tolist()) - 4./24
-#
-# drive_starts = dates.date2num(df['depart_drive_time_stamp'].tolist()) - 4./24
-# drive_stops = dates.date2num((df['depart_drive_time_stamp'] + df['depart_drive_time']).tolist()) - 4./24
-#
-# ax.barh(range(len(df.index)),stops-starts,0.75,starts)
-# ax.barh(range(len(df.index)),drive_stops-drive_starts,0.75,drive_starts)
-# # rule = rrulewrapper(HOURLY, interval=2, byhour=1)
-# # loc = RRuleLocator(rule)
-# formatter = DateFormatter('%H')
-# ax.xaxis.set_major_locator(HourLocator(interval=2))
-# ax.xaxis.set_major_formatter(formatter)
-# labelsx = ax.get_xticklabels()
-# plt.setp(labelsx, rotation=30,ha='right')
-# ax.set_yticks(range(len(df.index)))
-# ax.yaxis.grid(False)
-# # ax.yaxis.set_visible(False)
-# df
-# for n, i in enumerate(df.index):
-#     ax.text((stops[n]- starts[n])/2 + starts[n] ,n,strfdelta(df['travel_time'].loc[i],'{H}:{M:02}'),va='center',ha='center',color='w')
-#     ax.text(starts[n]+ 10./60/24,n,df['origin'].loc[i],va='center',ha='left',color='w')
-#     ax.text(stops[n]- 10./60/24,n,df['destination'].loc[i],va='center',ha='right',color='w')
-#
-# ax.set_yticklabels(df['price'].apply(lambda x: '$%.0f'%(np.round(x))))
-# plt.show()
-# # end%%
+# %% Plot some shit
+fig, ax = plt.subplots(figsize=(20,12))
 
-if __name__ == '__main__':
-    main()
+starts = dates.date2num(df['depart_time'].tolist()) - 4./24
+stops = dates.date2num(df['arrive_time_act'].tolist()) - 4./24
+
+drive_starts = dates.date2num(df['depart_drive_time_stamp'].tolist()) - 4./24
+drive_stops = dates.date2num((df['depart_drive_time_stamp'] + df['depart_drive_time']).tolist()) - 4./24
+
+ax.barh(range(len(df.index)),stops-starts,0.75,starts)
+ax.barh(range(len(df.index)),drive_stops-drive_starts,0.75,drive_starts)
+# rule = rrulewrapper(HOURLY, interval=2, byhour=1)
+# loc = RRuleLocator(rule)
+formatter = DateFormatter('%H')
+ax.xaxis.set_major_locator(HourLocator(interval=2))
+ax.xaxis.set_major_formatter(formatter)
+labelsx = ax.get_xticklabels()
+plt.setp(labelsx, rotation=30,ha='right')
+ax.set_yticks(range(len(df.index)))
+ax.yaxis.grid(False)
+# ax.yaxis.set_visible(False)
+df
+for n, i in enumerate(df.index):
+    ax.text((stops[n]- starts[n])/2 + starts[n] ,n,strfdelta(df['travel_time'].loc[i],'{H}:{M:02}'),va='center',ha='center',color='w')
+    ax.text((drive_stops[n]- drive_starts[n])/2 + drive_starts[n] ,n,strfdelta(df['depart_drive_time'].loc[i],'{H}:{M:02}'),va='center',ha='center',color='w')
+    ax.text(starts[n]+ 10./60/24,n,df['origin'].loc[i],va='center',ha='left',color='w')
+    ax.text(stops[n]- 10./60/24,n,df['destination'].loc[i],va='center',ha='right',color='w')
+
+ax.set_yticklabels(df['price'].apply(lambda x: '$%.0f'%(np.round(x))))
+ax.set_xlabel('Time - ATL Timezone')
+plt.show()
+# end%%
+
+# if __name__ == '__main__':
+#     main()
