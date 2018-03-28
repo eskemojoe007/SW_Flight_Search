@@ -27,9 +27,10 @@ def main():
 # end%%
 
 # %% Set Proxies
- proxies = {
-  'http': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80',
-  'https': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80'}
+proxies = None
+# proxies = {
+#     'http': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80',
+#     'https': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80'}
 
 # end%%
 
@@ -358,6 +359,7 @@ def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
     df = df_outbound
     df['depart_time'] = df.apply(lambda x: app_timezone(x,'origin','depart_time'),axis=1)
     df['arrive_time'] = df.apply(lambda x: app_timezone(x,'destination','arrive_time'),axis=1)
+    # add_drivetimes(df,'origin','depart_time','depart_drive_time',start='Anacortes, WA')
     add_drivetimes(df,'origin','depart_time','depart_drive_time')
     return get_sort_agony(df)
 # end%%
@@ -401,15 +403,16 @@ def app_timezone(row,location_key,time_key):
 
 
 # %% Testing single flight line by line
-df
+# df
 
-df = do_all_single_flight('ATL','SEA','07/20/2018','07/29/2018')
+# df = do_all_single_flight('ATL','SEA','07/20/2018','07/29/2018')
 dfs = do_all_multiple_flight(['ATL','CLT'],['SEA'],['07/20/2018','07/21/2018'],['07/29/2018'])
-
+# dfs = do_all_multiple_flight(['SEA'],['ATL','CLT'],['07/28/2018','07/29/2018','07/30/2018'],['08/02/2018'])
+df
 df = pd.concat(dfs)
 
 df = df.sort_values('agony').reset_index()
-df
+df.to_csv('Seattle_to_Home.csv')
 # available_dict = get_airport_codes(proxies=proxies)
 #
 # available_dict
@@ -431,19 +434,19 @@ df
 # df = get_sort_agony(df)
 # end%%
 # %%
-# enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
-df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
+# # enter_single_search('ATL','SLC','05/03/2018','05/07/2018',driver=d,available_codes=available_dict)
+# df = do_all_single_flight('CLT','SLC','05/03/2018','05/07/2018')
+# # df
+# dfs = do_all_multiple_flight(['ATL','CLT'],['SLC'],['05/03/2018','05/04/2018'],['05/07/2018'])
+# # iters = get_iter_items(['ATL','CLT'],['SLC'],['05/03/2018'],['05/07/2018'])
+# df = pd.concat(dfs,axis=0).reset_index()
+# # iters[0][0]
+# df = get_sort_agony(df)
 # df
-dfs = do_all_multiple_flight(['ATL','CLT'],['SLC'],['05/03/2018','05/04/2018'],['05/07/2018'])
-# iters = get_iter_items(['ATL','CLT'],['SLC'],['05/03/2018'],['05/07/2018'])
-df = pd.concat(dfs,axis=0).reset_index()
-# iters[0][0]
-df = get_sort_agony(df)
-df
 # end%%
 #
 # %% Plot some shit
-fig, ax = plt.subplots(figsize=(20,12))
+fig, ax = plt.subplots(figsize=(15,9))
 
 starts = dates.date2num(df['depart_time'].tolist()) - 4./24
 stops = dates.date2num(df['arrive_time_act'].tolist()) - 4./24
