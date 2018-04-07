@@ -27,9 +27,9 @@ def main():
 # end%%
 
 # %% Set Proxies
- proxies = {
-  'http': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80',
-  'https': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80'}
+ # proxies = {
+ #  'http': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80',
+ #  'https': 'http://PITC-Zscaler-Americas-Alpharetta3PR.proxy.corporate.ge.com:80'}
 
 # end%%
 
@@ -347,7 +347,7 @@ def get_sort_agony(df):
 # end%%
 
 # %% Do it allows
-def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
+def do_all_single_flight(origin,destination,outbound_date_str,return_date_str,proxies=None):
     available_dict = get_airport_codes(proxies=proxies)
     # d = get_driver()
     # enter_single_search(origin,destination,outbound_date_str,return_date_str,driver=d,available_codes=available_dict)
@@ -363,7 +363,7 @@ def do_all_single_flight(origin,destination,outbound_date_str,return_date_str):
 # end%%
 
 # %% Do it all multiple
-def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_strs):
+def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_strs,proxies=None):
     iters = get_iter_items(origins,destinations,outbound_date_strs,return_date_strs)
 
     available_dict = get_airport_codes(proxies=proxies)
@@ -379,7 +379,7 @@ def do_all_multiple_flight(origins,destinations,outbound_date_strs,return_date_s
         # add_timezones(df_temp,'origin','depart_time')
         # add_timezones(df_temp,'destination','arrive_time')
         # add_drivetimes(df_temp,'origin','depart_time','depart_drive_time')
-        df_temp = do_all_single_flight(origin,destination,outbound_date_str,return_date_str)
+        df_temp = do_all_single_flight(origin,destination,outbound_date_str,return_date_str,proxies=None)
 
         dfs.append(df_temp)
     return dfs
@@ -403,8 +403,8 @@ def app_timezone(row,location_key,time_key):
 # %% Testing single flight line by line
 df
 
-df = do_all_single_flight('ATL','SEA','07/20/2018','07/29/2018')
-dfs = do_all_multiple_flight(['ATL','CLT'],['SEA'],['07/20/2018','07/21/2018'],['07/29/2018'])
+# df = do_all_single_flight('ATL','SEA','07/20/2018','07/29/2018')
+dfs = do_all_multiple_flight(['ATL','CLT'],['slc'],['03/28/2018','03/29/2018','03/30/2018','03/31/2018'],['04/21/2018'])
 
 df = pd.concat(dfs)
 
